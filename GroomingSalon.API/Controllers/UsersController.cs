@@ -15,9 +15,12 @@ public class UsersController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IPasswordHasher<User> _passwordHasher;
 
-    public UsersController(ApplicationDbContext context)
+    public UsersController(
+        ApplicationDbContext context,
+        IPasswordHasher<User> passwordHasher)
     {
         _context = context;
+        _passwordHasher = passwordHasher;
     }
 
     // Получить всех пользователей
@@ -62,27 +65,57 @@ public class UsersController : ControllerBase
         return Ok(user);
     }
 
-    // Создать пользователя
-    [HttpPost]
-    public async Task<IActionResult> CreateUser(User user)
+    // Регистрация пользователя
+    [HttpPost("register")]
+    public async Task<IActionResult> Register(RegisterUserDto dto)
     {
-        var emailExists = await _context.Users
-            .AnyAsync(u => u.Email == user.Email);
+ 
+        var email = dto.Email.Trim();
+
+        bool emailExists = await _context.Users
+            .AnyAsync(u => u.Email == email);
 
         if (emailExists)
-            return BadRequest("Пользователь с таким email уже существует.");
+        {
+            return Conflict(new
+            {
+                message = "Пользователь с таким email уже существует"
+            });
+        }
 
-        user.Id = 0;
-        user.CreatedAt = DateTime.UtcNow;
-        user.IsAdmin = false;
+
+        var user = new User
+        {
+            Name = dto.Name.Trim(),
+            Email = email,
+            Phone = dto.Phone?.Trim(),
+            IsAdmin = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        // Хеш пароль
+        user.PasswordHash = _passwordHasher.HashPassword(
+            user,
+            dto.Password
+        );
 
         _context.Users.Add(user);
+
         await _context.SaveChangesAsync();
 
+ 
         return CreatedAtAction(
             nameof(GetUser),
             new { id = user.Id },
-            new { id = user.Id, user.Name, user.Email }
+            new
+            {
+                user.Id,
+                user.Name,
+                user.Email,
+                user.Phone,
+                user.IsAdmin,
+                user.CreatedAt
+            }
         );
     }
 
