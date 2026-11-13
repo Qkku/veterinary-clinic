@@ -1,4 +1,5 @@
-﻿
+using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using GroomingSalon.API.Data;
@@ -68,6 +69,7 @@ public class GroomerSchedulesController : ControllerBase
     }
 
     // Добавить расписание
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateSchedule(GroomerSchedule schedule)
     {
@@ -103,6 +105,7 @@ public class GroomerSchedulesController : ControllerBase
     }
 
     // Изменить расписание
+    [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateSchedule(
         uint id,
@@ -147,6 +150,7 @@ public class GroomerSchedulesController : ControllerBase
     }
 
     // Удалить расписание
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSchedule(uint id)
     {

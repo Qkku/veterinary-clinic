@@ -1,4 +1,5 @@
-﻿
+using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using GroomingSalon.API.Data;
@@ -38,6 +39,7 @@ public class ServicesController : ControllerBase
     }
 
     // Добавить новую услугу
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateService(Service service)
     {
@@ -55,6 +57,7 @@ public class ServicesController : ControllerBase
     }
 
     // Изменить существующую услугу
+    [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateService(uint id, Service updatedService)
     {
@@ -75,6 +78,7 @@ public class ServicesController : ControllerBase
     }
 
     // Удалить услугу
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteService(uint id)
     {

@@ -1,4 +1,5 @@
-﻿
+using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using GroomingSalon.API.Data;
@@ -62,6 +63,7 @@ public class GroomerTimeOffController : ControllerBase
     }
 
     // Добавить период отсутствия
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateTimeOff(GroomerTimeOff timeOff)
     {
@@ -87,6 +89,7 @@ public class GroomerTimeOffController : ControllerBase
     }
 
     // Изменить период отсутствия
+    [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTimeOff(
         uint id,
@@ -118,6 +121,7 @@ public class GroomerTimeOffController : ControllerBase
     }
 
     // Удалить период отсутствия
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTimeOff(uint id)
     {
