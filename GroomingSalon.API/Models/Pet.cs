@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 
 namespace GroomingSalon.API.Models;
 
 public partial class Pet
 {
+
     public uint Id { get; set; }
 
     public uint UserId { get; set; }
@@ -23,5 +25,6 @@ public partial class Pet
 
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
 
+    [ValidateNever]
     public virtual User User { get; set; } = null!;
 }
