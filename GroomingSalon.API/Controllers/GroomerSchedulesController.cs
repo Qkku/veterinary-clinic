@@ -18,7 +18,6 @@ public class GroomerSchedulesController : ControllerBase
         _context = context;
     }
 
-    // Получить всё расписание
     [HttpGet]
     public async Task<IActionResult> GetSchedules()
     {
@@ -41,7 +40,6 @@ public class GroomerSchedulesController : ControllerBase
         return Ok(schedules);
     }
 
-    // Получить расписание по ID
     [HttpGet("{id}")]
     public async Task<IActionResult> GetSchedule(uint id)
     {
@@ -68,7 +66,6 @@ public class GroomerSchedulesController : ControllerBase
         return Ok(schedule);
     }
 
-    // Добавить расписание
     [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateSchedule(GroomerSchedule schedule)
@@ -104,7 +101,7 @@ public class GroomerSchedulesController : ControllerBase
         );
     }
 
-    // Изменить расписание
+
     [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateSchedule(
@@ -149,7 +146,7 @@ public class GroomerSchedulesController : ControllerBase
         return Ok(new { message = "Расписание обновлено." });
     }
 
-    // Удалить расписание
+    
     [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSchedule(uint id)

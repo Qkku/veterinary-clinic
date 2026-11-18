@@ -30,7 +30,6 @@ public class AuthController : ControllerBase
         _configuration = configuration;
     }
 
-    // Вход по email и паролю. Возвращает JWT.
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginUserDto dto)
@@ -38,7 +37,6 @@ public class AuthController : ControllerBase
         var email = dto.Email.Trim();
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-        // Одинаковый ответ для неизвестного email и неверного пароля.
         if (user == null)
             return Unauthorized(new { message = "Неверный email или пароль." });
 
@@ -48,7 +46,7 @@ public class AuthController : ControllerBase
         if (verification == PasswordVerificationResult.Failed)
             return Unauthorized(new { message = "Неверный email или пароль." });
 
-        // При необходимости обновляет хеш, если алгоритм/параметры хеширования изменились.
+
         if (verification == PasswordVerificationResult.SuccessRehashNeeded)
         {
             user.PasswordHash = _passwordHasher.HashPassword(user, dto.Password);
@@ -74,7 +72,6 @@ public class AuthController : ControllerBase
         });
     }
 
-    // Проверка токена и получение текущего пользователя.
     [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> Me()
