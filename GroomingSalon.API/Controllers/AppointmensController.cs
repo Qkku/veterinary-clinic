@@ -1,3 +1,4 @@
+
 using System.Security.Claims;
 using GroomingSalon.API.Data;
 using GroomingSalon.API.Models;
@@ -13,50 +14,194 @@ namespace GroomingSalon.API.Controllers;
 public class AppointmentsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    public AppointmentsController(ApplicationDbContext context) => _context = context;
+
+    public AppointmentsController(ApplicationDbContext context)
+    {
+        _context = context;
+    }
 
     private bool TryGetUserId(out uint userId) =>
-        uint.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
+        uint.TryParse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier),
+            out userId);
 
+    // Получение записей текущего пользователя
     [HttpGet]
     public async Task<IActionResult> GetAppointments()
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        var appointments = await _context.Appointments.Where(a => a.UserId == userId)
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var appointments = await _context.Appointments
+            .Where(a => a.UserId == userId)
             .Select(a => new
             {
-                a.Id, a.UserId, a.PetId, PetName = a.Pet.Name,
-                a.GroomerId, GroomerName = a.Groomer.Name,
-                a.ServiceId, ServiceName = a.Service.Name,
-                a.StartDatetime, a.EndDatetime, a.Status, a.Comment, a.CreatedAt
-            }).ToListAsync();
+                a.Id,
+                a.UserId,
+                a.PetId,
+                PetName = a.Pet.Name,
+                a.GroomerId,
+                GroomerName = a.Groomer.Name,
+                a.ServiceId,
+                ServiceName = a.Service.Name,
+                a.StartDatetime,
+                a.EndDatetime,
+                a.Status,
+                a.Comment,
+                a.CreatedAt
+            })
+            .ToListAsync();
+
         return Ok(appointments);
     }
 
+    // Получение одной записи пользователя
     [HttpGet("{id}")]
     public async Task<IActionResult> GetAppointment(uint id)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
         var appointment = await _context.Appointments
             .Where(a => a.Id == id && a.UserId == userId)
             .Select(a => new
             {
-                a.Id, a.UserId, a.PetId, PetName = a.Pet.Name,
-                a.GroomerId, GroomerName = a.Groomer.Name,
-                a.ServiceId, ServiceName = a.Service.Name,
-                a.StartDatetime, a.EndDatetime, a.Status, a.Comment, a.CreatedAt
-            }).FirstOrDefaultAsync();
+                a.Id,
+                a.UserId,
+                a.PetId,
+                PetName = a.Pet.Name,
+                a.GroomerId,
+                GroomerName = a.Groomer.Name,
+                a.ServiceId,
+                ServiceName = a.Service.Name,
+                a.StartDatetime,
+                a.EndDatetime,
+                a.Status,
+                a.Comment,
+                a.CreatedAt
+            })
+            .FirstOrDefaultAsync();
+
         return appointment == null ? NotFound() : Ok(appointment);
     }
 
+    // Получение всех записей салона (только администратор)
+    [HttpGet("all")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllAppointments()
+    {
+        var appointments = await _context.Appointments
+            .OrderBy(a => a.StartDatetime)
+            .Select(a => new
+            {
+                a.Id,
+                a.UserId,
+                CustomerName = a.User.Name,
+                CustomerPhone = a.User.Phone,
+                a.PetId,
+                PetName = a.Pet.Name,
+                a.GroomerId,
+                GroomerName = a.Groomer.Name,
+                a.ServiceId,
+                ServiceName = a.Service.Name,
+                a.StartDatetime,
+                a.EndDatetime,
+                a.Status,
+                a.Comment,
+                a.CreatedAt
+            })
+            .ToListAsync();
 
+        return Ok(appointments);
+    }
 
+    // Изменение статуса записи (только администратор)
+    [HttpPut("{id}/status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateAppointmentStatus(
+        uint id,
+        [FromBody] UpdateAppointmentStatusRequest request)
+    {
+        var allowedStatuses = new[]
+        {
+        "booked",
+        "confirmed",
+        "completed",
+        "cancelled",
+        "no_show"
+    };
+
+        if (!allowedStatuses.Contains(request.Status))
+            return BadRequest("Недопустимый статус записи.");
+
+        var appointment = await _context.Appointments
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (appointment == null)
+            return NotFound("Запись не найдена.");
+
+        appointment.Status = request.Status;
+
+        bool accountBanned = false;
+
+        if (request.Status == "no_show")
+        {
+            // Получаем три последние записи клиента,
+            // которые уже начались
+            var recentAppointments = await _context.Appointments
+                .Where(a =>
+                    a.UserId == appointment.UserId &&
+                    a.StartDatetime <= DateTime.Now)
+                .OrderByDescending(a => a.StartDatetime)
+                .ThenByDescending(a => a.Id)
+                .Take(3)
+                .ToListAsync();
+
+            // Проверяем, все ли три записи имеют статус no_show
+            if (recentAppointments.Count == 3 &&
+                recentAppointments.All(a => a.Status == "no_show"))
+            {
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == appointment.UserId);
+
+                if (user != null)
+                {
+                    user.IsBanned = true;
+                    accountBanned = true;
+
+                    // Отменяем все будущие активные записи клиента
+                    var futureAppointments = await _context.Appointments
+                        .Where(a =>
+                            a.UserId == appointment.UserId &&
+                            a.StartDatetime > DateTime.Now &&
+                            (a.Status == "booked" ||
+                             a.Status == "confirmed"))
+                        .ToListAsync();
+
+                    foreach (var futureAppointment in futureAppointments)
+                    {
+                        futureAppointment.Status = "cancelled";
+                    }
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            appointment.Id,
+            appointment.Status,
+            AccountBanned = accountBanned
+        });
+    }
+
+    // Создание записи
     [HttpPost]
     public async Task<IActionResult> CreateAppointment(Appointment appointment)
     {
         if (!TryGetUserId(out var userId))
             return Unauthorized();
-
 
         DateTime start = appointment.StartDatetime;
         DateTime now = DateTime.Now;
@@ -67,8 +212,8 @@ public class AppointmentsController : ControllerBase
         if (start > now.AddMonths(3))
             return BadRequest("Запись доступна максимум на 3 месяца вперёд.");
 
-
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync();
 
         try
         {
@@ -81,13 +226,11 @@ public class AppointmentsController : ControllerBase
             if (groomer == null)
                 return BadRequest("Мастер не найден или неактивен.");
 
-
             var pet = await _context.Pets.FirstOrDefaultAsync(p =>
                 p.Id == appointment.PetId && p.UserId == userId);
 
             if (pet == null)
                 return BadRequest("Питомец не найден или принадлежит другому пользователю.");
-
 
             var service = await _context.Services.FirstOrDefaultAsync(s =>
                 s.Id == appointment.ServiceId && s.IsActive == true);
@@ -97,10 +240,9 @@ public class AppointmentsController : ControllerBase
 
             DateTime end = start.AddMinutes(service.DurationMinutes);
 
- 
-            sbyte dayOfWeek = (sbyte)(((int)start.DayOfWeek + 6) % 7 + 1);
+            sbyte dayOfWeek =
+                (sbyte)(((int)start.DayOfWeek + 6) % 7 + 1);
 
-      
             var schedules = await _context.GroomerSchedules
                 .Where(s =>
                     s.GroomerId == groomer.Id &&
@@ -113,7 +255,6 @@ public class AppointmentsController : ControllerBase
             TimeSpan startTime = start.TimeOfDay;
             TimeSpan endTime = end.TimeOfDay;
 
-
             bool fitsSchedule = schedules.Any(s =>
                 startTime >= s.StartTime &&
                 endTime <= s.EndTime &&
@@ -124,7 +265,6 @@ public class AppointmentsController : ControllerBase
             if (!fitsSchedule)
                 return BadRequest("Выбранное время не соответствует расписанию мастера.");
 
-
             bool hasTimeOff = await _context.GroomerTimeOffs.AnyAsync(t =>
                 t.GroomerId == groomer.Id &&
                 t.StartDatetime < end &&
@@ -132,7 +272,6 @@ public class AppointmentsController : ControllerBase
 
             if (hasTimeOff)
                 return Conflict("Мастер отсутствует в выбранное время.");
-
 
             bool hasAppointment = await _context.Appointments.AnyAsync(a =>
                 a.GroomerId == groomer.Id &&
@@ -143,7 +282,6 @@ public class AppointmentsController : ControllerBase
             if (hasAppointment)
                 return Conflict("Это время уже занято. Выберите другой слот.");
 
-
             appointment.Id = 0;
             appointment.UserId = userId;
             appointment.StartDatetime = start;
@@ -152,9 +290,8 @@ public class AppointmentsController : ControllerBase
             appointment.Status = "booked";
 
             _context.Appointments.Add(appointment);
+
             await _context.SaveChangesAsync();
-
-
             await transaction.CommitAsync();
 
             return CreatedAtAction(
@@ -169,7 +306,7 @@ public class AppointmentsController : ControllerBase
         }
     }
 
-
+    // Отмена записи пользователем
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletesAppointment(uint id)
     {
@@ -177,12 +314,14 @@ public class AppointmentsController : ControllerBase
             return Unauthorized();
 
         var appointment = await _context.Appointments
-            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
+            .FirstOrDefaultAsync(a =>
+                a.Id == id && a.UserId == userId);
 
         if (appointment == null)
             return NotFound("Запись не найдена.");
 
-        if (appointment.Status != "booked" && appointment.Status != "confirmed")
+        if (appointment.Status != "booked" &&
+            appointment.Status != "confirmed")
             return Conflict("Эту запись нельзя отменить.");
 
         if (appointment.StartDatetime <= DateTime.Now)
@@ -194,6 +333,10 @@ public class AppointmentsController : ControllerBase
 
         return NoContent();
     }
+}
 
 
+public class UpdateAppointmentStatusRequest
+{
+    public string Status { get; set; } = string.Empty;
 }

@@ -1,3 +1,4 @@
+
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -46,6 +47,12 @@ public class AuthController : ControllerBase
         if (verification == PasswordVerificationResult.Failed)
             return Unauthorized(new { message = "Неверный email или пароль." });
 
+        // Проверка блокировки аккаунта
+        if (user.IsBanned)
+            return StatusCode(403, new
+            {
+                message = "Ваш аккаунт заблокирован. Обратитесь к администратору."
+            });
 
         if (verification == PasswordVerificationResult.SuccessRehashNeeded)
         {
@@ -105,6 +112,7 @@ public class AuthController : ControllerBase
         var issuer = _configuration["Jwt:Issuer"] ?? "GroomingSalon.API";
         var audience = _configuration["Jwt:Audience"] ?? "GroomingSalon.Frontend";
         var minutes = _configuration.GetValue<int?>("Jwt:ExpirationMinutes") ?? 60;
+
         if (minutes <= 0) minutes = 60;
 
         var claims = new List<Claim>

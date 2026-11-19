@@ -1,4 +1,6 @@
+
 using System.Text;
+using System.Security.Claims;
 using GroomingSalon.API.Data;
 using GroomingSalon.API.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -9,21 +11,21 @@ using GroomingSalon.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// В Development User Secrets загружаются из хранилища, связанного с
-// UserSecretsId в .csproj. Явная регистрация делает источник конфигурации
-// очевидным и не помещает секрет в репозиторий.
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddUserSecrets(typeof(Program).Assembly, optional: true);
 }
 
 builder.Services.AddScoped<ScheduleService>();
+builder.Services.AddHostedService<AppointmentCompletionService>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySQL(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddOpenApi();
+
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
@@ -52,9 +54,10 @@ builder.Services.AddCors(options =>
     });
 });
 
-
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+
+if (string.IsNullOrWhiteSpace(jwtKey) ||
+    Encoding.UTF8.GetByteCount(jwtKey) < 32)
 {
     throw new InvalidOperationException(
         "JWT key не задан или короче 32 байт. Добавьте Jwt:Key через User Secrets.");
@@ -77,6 +80,34 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30)
+        };
+
+        // Проверка блокировки при каждом запросе с JWT
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var idValue = context.Principal?
+                    .FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (!uint.TryParse(idValue, out var userId))
+                {
+                    context.Fail("Некорректный токен.");
+                    return;
+                }
+
+                var db = context.HttpContext.RequestServices
+                    .GetRequiredService<ApplicationDbContext>();
+
+                var userExistsAndNotBanned = await db.Users
+                    .AsNoTracking()
+                    .AnyAsync(u => u.Id == userId && !u.IsBanned);
+
+                if (!userExistsAndNotBanned)
+                {
+                    context.Fail("Аккаунт заблокирован или не существует.");
+                }
+            }
         };
     });
 

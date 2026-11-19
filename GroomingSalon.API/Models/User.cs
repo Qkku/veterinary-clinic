@@ -17,6 +17,8 @@ public partial class User
 
     public bool IsAdmin { get; set; }
 
+    public bool IsBanned { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();

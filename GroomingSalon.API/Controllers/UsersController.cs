@@ -29,7 +29,14 @@ public class UsersController : ControllerBase
     {
         var users = await _context.Users.Select(u => new
         {
-            u.Id, u.Name, u.Email, u.Phone, u.IsAdmin, u.CreatedAt
+            u.Id,
+            u.Name,
+            u.Email,
+            u.Phone,
+            u.IsAdmin,
+            u.IsBanned,
+            u.CreatedAt
+
         }).ToListAsync();
         return Ok(users);
     }
@@ -92,6 +99,68 @@ public class UsersController : ControllerBase
 
         return Ok(new { user.Id, user.Name, user.Email, user.Phone, user.IsAdmin, user.CreatedAt });
     }
+
+
+    // Ручная блокировка пользователя
+    [HttpPut("{id}/ban")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> BanUser(uint id)
+    {
+        var user = await _context.Users.FindAsync(id);
+
+        if (user == null)
+            return NotFound(new { message = "Пользователь не найден." });
+
+        if (user.IsAdmin)
+            return BadRequest(new { message = "Нельзя заблокировать администратора." });
+
+        user.IsBanned = true;
+
+        // Отменяем все будущие записи пользователя
+        var futureAppointments = await _context.Appointments
+            .Where(a => a.Pet.UserId == id
+                && a.StartDatetime > DateTime.Now
+                && (a.Status == "booked" || a.Status == "confirmed"))
+            .ToListAsync();
+
+        foreach (var appointment in futureAppointments)
+        {
+            appointment.Status = "cancelled";
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Пользователь заблокирован.",
+            userId = user.Id,
+            user.IsBanned,
+            cancelledAppointments = futureAppointments.Count
+        });
+    }
+
+    // Ручная разблокировка пользователя
+    [HttpPut("{id}/unban")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UnbanUser(uint id)
+    {
+        var user = await _context.Users.FindAsync(id);
+
+        if (user == null)
+            return NotFound(new { message = "Пользователь не найден." });
+
+        user.IsBanned = false;
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Пользователь разблокирован.",
+            userId = user.Id,
+            user.IsBanned
+        });
+    }
+
+
 
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]

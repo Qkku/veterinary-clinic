@@ -48,6 +48,8 @@ public partial class ApplicationDbContext : DbContext
 
             entity.HasIndex(e => e.Status, "idx_app_status");
 
+
+
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.Comment)
                 .HasColumnType("text")
@@ -306,6 +308,9 @@ public partial class ApplicationDbContext : DbContext
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.Property(e => e.IsBanned)
+                .HasColumnName("is_banned");
 
             entity.ToTable("users");
 
