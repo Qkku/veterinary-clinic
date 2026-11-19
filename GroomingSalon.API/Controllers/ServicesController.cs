@@ -71,6 +71,7 @@ public class ServicesController : ControllerBase
         service.Price = updatedService.Price;
         service.DurationMinutes = updatedService.DurationMinutes;
         service.IsActive = updatedService.IsActive;
+        service.ImageUrl = updatedService.ImageUrl;
 
         await _context.SaveChangesAsync();
 

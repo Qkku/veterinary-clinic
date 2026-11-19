@@ -27,4 +27,6 @@ public partial class Pet
 
     [ValidateNever]
     public virtual User User { get; set; } = null!;
+
+    public string? ImageUrl { get; set; }
 }

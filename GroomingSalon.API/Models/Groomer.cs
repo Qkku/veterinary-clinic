@@ -34,4 +34,6 @@ public partial class Groomer
     public virtual ICollection<GroomerTimeOff> GroomerTimeOffs { get; set; } = new List<GroomerTimeOff>();
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    public string? ImageUrl { get; set; }
 }

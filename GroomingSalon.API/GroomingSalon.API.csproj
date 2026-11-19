@@ -23,4 +23,12 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="wwwroot\uploads\pets\" />
+    <Folder Include="wwwroot\uploads\groomers\" />
+    <Folder Include="wwwroot\uploads\users\" />
+    <Folder Include="wwwroot\uploads\services\" />
+    <Folder Include="wwwroot\portfolio\" />
+  </ItemGroup>
+
 </Project>

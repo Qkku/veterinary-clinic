@@ -1,9 +1,11 @@
-using Microsoft.AspNetCore.Authorization;
 
+using GroomingSalon.API.Data;
+using GroomingSalon.API.DTOs;
+using GroomingSalon.API.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using GroomingSalon.API.Data;
-using GroomingSalon.API.Models;
 
 namespace GroomingSalon.API.Controllers;
 
@@ -12,20 +14,20 @@ namespace GroomingSalon.API.Controllers;
 public class GroomersController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly IPasswordHasher<Groomer> _passwordHasher;
 
-    public GroomersController(ApplicationDbContext context)
+    public GroomersController(
+        ApplicationDbContext context,
+        IPasswordHasher<Groomer> passwordHasher)
     {
         _context = context;
+        _passwordHasher = passwordHasher;
     }
 
     // Получить всех мастеров
     [HttpGet]
     public async Task<IActionResult> GetGroomers()
     {
-        var connection = _context.Database.GetDbConnection();
-
-        var count = await _context.Groomers.CountAsync();
-
         var groomers = await _context.Groomers
             .Select(g => new
             {
@@ -42,13 +44,7 @@ public class GroomersController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new
-        {
-            Database = connection.Database,
-            Server = connection.DataSource,
-            Count = count,
-            Groomers = groomers
-        });
+        return Ok(groomers);
     }
 
     // Получить мастера по ID
@@ -81,10 +77,28 @@ public class GroomersController : ControllerBase
     // Добавить мастера
     [Authorize(Roles = "Admin")]
     [HttpPost]
-    public async Task<IActionResult> CreateGroomer(Groomer groomer)
+    public async Task<IActionResult> CreateGroomer(CreateGroomerDto dto)
     {
-        groomer.Id = 0;
-        groomer.CreatedAt = DateTime.UtcNow;
+        var email = dto.Email.Trim();
+
+        if (await _context.Groomers.AnyAsync(g => g.Email == email))
+            return Conflict(new { message = "Мастер с таким email уже существует." });
+
+        var groomer = new Groomer
+        {
+            Name = dto.Name.Trim(),
+            Email = email,
+            Phone = dto.Phone,
+            Age = dto.Age,
+            Education = dto.Education,
+            ExperienceYears = dto.ExperienceYears,
+            Specialization = dto.Specialization,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        groomer.PasswordHash = _passwordHasher.HashPassword(
+            groomer, dto.Password);
 
         _context.Groomers.Add(groomer);
         await _context.SaveChangesAsync();
@@ -92,31 +106,47 @@ public class GroomersController : ControllerBase
         return CreatedAtAction(
             nameof(GetGroomer),
             new { id = groomer.Id },
-            new { id = groomer.Id, groomer.Name }
+            new { id = groomer.Id, groomer.Name, groomer.Email }
         );
     }
 
     // Изменить мастера
     [Authorize(Roles = "Admin")]
     [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateGroomer(uint id, Groomer updatedGroomer)
+    public async Task<IActionResult> UpdateGroomer(
+        uint id,
+        UpdateGroomerDto dto)
     {
         var groomer = await _context.Groomers.FindAsync(id);
 
         if (groomer == null)
             return NotFound();
 
-        groomer.Name = updatedGroomer.Name;
-        groomer.Email = updatedGroomer.Email;
-        groomer.Phone = updatedGroomer.Phone;
-        groomer.Age = updatedGroomer.Age;
-        groomer.Education = updatedGroomer.Education;
-        groomer.ExperienceYears = updatedGroomer.ExperienceYears;
-        groomer.Specialization = updatedGroomer.Specialization;
-        groomer.IsActive = updatedGroomer.IsActive;
+        var email = dto.Email.Trim();
 
-        if (!string.IsNullOrWhiteSpace(updatedGroomer.PasswordHash))
-            groomer.PasswordHash = updatedGroomer.PasswordHash;
+        var emailExists = await _context.Groomers
+            .AnyAsync(g => g.Email == email && g.Id != id);
+
+        if (emailExists)
+            return Conflict(new { message = "Этот email уже используется другим мастером." });
+
+        groomer.Name = dto.Name.Trim();
+        groomer.Email = email;
+        groomer.Phone = dto.Phone;
+        groomer.Age = dto.Age;
+        groomer.Education = dto.Education;
+        groomer.ExperienceYears = dto.ExperienceYears;
+        groomer.Specialization = dto.Specialization;
+        groomer.IsActive = dto.IsActive;
+
+        if (!string.IsNullOrWhiteSpace(dto.Password))
+        {
+            if (dto.Password.Length < 8)
+                return BadRequest(new { message = "Пароль должен содержать минимум 8 символов." });
+
+            groomer.PasswordHash = _passwordHasher.HashPassword(
+                groomer, dto.Password);
+        }
 
         await _context.SaveChangesAsync();
 

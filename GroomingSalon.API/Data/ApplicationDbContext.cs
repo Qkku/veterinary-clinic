@@ -28,6 +28,8 @@ public partial class ApplicationDbContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<Notification> Notifications { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Appointment>(entity =>
@@ -131,6 +133,9 @@ public partial class ApplicationDbContext : DbContext
             entity.Property(e => e.Specialization)
                 .HasMaxLength(150)
                 .HasColumnName("specialization");
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(500)
+                 .HasColumnName("image_url");
         }   );
 
         modelBuilder.Entity<GroomerSchedule>(entity =>
@@ -233,6 +238,10 @@ public partial class ApplicationDbContext : DbContext
             entity.HasOne(d => d.User).WithMany(p => p.Pets)
                 .HasForeignKey(d => d.UserId)
                 .HasConstraintName("fk_pets_user");
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(500)
+                .HasColumnName("image_url");
+
         });
 
         modelBuilder.Entity<Review>(entity =>
@@ -303,6 +312,9 @@ public partial class ApplicationDbContext : DbContext
             entity.Property(e => e.Price)
                 .HasPrecision(10)
                 .HasColumnName("price");
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(500)
+                .HasColumnName("image_url");
         });
 
         modelBuilder.Entity<User>(entity =>
@@ -336,7 +348,47 @@ public partial class ApplicationDbContext : DbContext
             entity.Property(e => e.Phone)
                 .HasMaxLength(30)
                 .HasColumnName("phone");
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(500)
+                .HasColumnName("image_url");
         });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("notifications");
+
+            entity.HasIndex(e => e.UserId, "idx_notifications_user");
+            entity.HasIndex(e => e.GroomerId, "idx_notifications_groomer");
+            entity.HasIndex(e => e.CreatedAt, "idx_notifications_created");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.GroomerId).HasColumnName("groomer_id");
+
+            entity.Property(e => e.Title)
+                .HasMaxLength(150)
+                .HasColumnName("title");
+
+            entity.Property(e => e.Message)
+                .HasMaxLength(500)
+                .HasColumnName("message");
+
+            entity.Property(e => e.Type)
+                .HasMaxLength(50)
+                .HasColumnName("type");
+
+            entity.Property(e => e.IsRead)
+                .HasColumnName("is_read")
+                .HasDefaultValue(false);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("datetime")
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("created_at");
+        });
+
 
         OnModelCreatingPartial(modelBuilder);
     }

@@ -66,6 +66,7 @@ public class PetsController : ControllerBase
         pet.Breed = updatedPet.Breed;
         pet.Size = updatedPet.Size;
         pet.Notes = updatedPet.Notes;
+        pet.ImageUrl = updatedPet.ImageUrl;
         await _context.SaveChangesAsync();
         return Ok(new { pet.Id, pet.UserId, pet.Name, pet.Age, pet.Breed, pet.Size, pet.Notes, pet.CreatedAt });
     }

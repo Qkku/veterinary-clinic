@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using GroomingSalon.API.Services;
+using GroomingSalon.API.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,9 @@ builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddHostedService<AppointmentCompletionService>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<IPasswordHasher<Groomer>, PasswordHasher<Groomer>>();
+builder.Services.AddSignalR();
+builder.Services.AddScoped<NotificationService>();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySQL(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -49,8 +53,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
     {
         policy.WithOrigins("http://localhost:5173")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+      .AllowAnyHeader()
+      .AllowAnyMethod()
+      .AllowCredentials();
     });
 });
 
@@ -85,6 +90,21 @@ builder.Services
         // Проверка блокировки при каждом запросе с JWT
         options.Events = new JwtBearerEvents
         {
+
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    context.HttpContext.Request.Path.StartsWithSegments(
+                        "/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
+
             OnTokenValidated = async context =>
             {
                 var idValue = context.Principal?
@@ -96,24 +116,44 @@ builder.Services
                     return;
                 }
 
+                var role = context.Principal?
+                    .FindFirst(ClaimTypes.Role)?.Value;
+
                 var db = context.HttpContext.RequestServices
                     .GetRequiredService<ApplicationDbContext>();
 
-                var userExistsAndNotBanned = await db.Users
-                    .AsNoTracking()
-                    .AnyAsync(u => u.Id == userId && !u.IsBanned);
-
-                if (!userExistsAndNotBanned)
+                if (role == "Groomer")
                 {
-                    context.Fail("Аккаунт заблокирован или не существует.");
+                    var groomerIsActive = await db.Groomers
+                        .AsNoTracking()
+                        .AnyAsync(g => g.Id == userId && g.IsActive == true);
+
+                    if (!groomerIsActive)
+                        context.Fail("Аккаунт мастера неактивен или не существует.");
+                }
+                else if (role == "Admin" || role == "Customer")
+                {
+                    var userIsActive = await db.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == userId && !u.IsBanned);
+
+                    if (!userIsActive)
+                        context.Fail("Аккаунт заблокирован или не существует.");
+                }
+                else
+                {
+                    context.Fail("Неизвестная роль пользователя.");
                 }
             }
+
         };
     });
 
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+app.UseStaticFiles();
 
 app.UseCors("Frontend");
 
@@ -128,5 +168,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications")
+   .RequireAuthorization();
 
 app.Run();

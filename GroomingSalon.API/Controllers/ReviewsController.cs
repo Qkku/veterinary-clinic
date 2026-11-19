@@ -1,11 +1,12 @@
 
-using System.Security.Claims;
-using System.ComponentModel.DataAnnotations;
 using GroomingSalon.API.Data;
 using GroomingSalon.API.Models;
+using GroomingSalon.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 
 namespace GroomingSalon.API.Controllers;
 
@@ -15,10 +16,13 @@ namespace GroomingSalon.API.Controllers;
 public class ReviewsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly NotificationService _notifications;
 
-    public ReviewsController(ApplicationDbContext context)
+    public ReviewsController(ApplicationDbContext context, NotificationService notifications)
     {
         _context = context;
+        _notifications = notifications;
+
     }
 
     private bool TryGetUserId(out uint userId) =>
@@ -115,6 +119,12 @@ public class ReviewsController : ControllerBase
 
         _context.Reviews.Add(review);
         await _context.SaveChangesAsync();
+
+        await _notifications.NotifyGroomerAsync(
+            review.GroomerId,
+            "Новый отзыв",
+            $"Клиент оставил отзыв. Оценка: {review.Rating}/5.",
+            "review_created");
 
         return CreatedAtAction(
             nameof(GetReview),

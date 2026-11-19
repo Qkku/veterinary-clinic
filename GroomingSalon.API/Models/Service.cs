@@ -20,4 +20,6 @@ public partial class Service
     public DateTime CreatedAt { get; set; }
 
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+
+    public string? ImageUrl { get; set; }
 }

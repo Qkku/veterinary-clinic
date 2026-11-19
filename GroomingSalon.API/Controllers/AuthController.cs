@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
+
 namespace GroomingSalon.API.Controllers;
 
 [ApiController]
@@ -20,15 +21,19 @@ public class AuthController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly IConfiguration _configuration;
+    private readonly IPasswordHasher<Groomer> _groomerPasswordHasher;
 
     public AuthController(
         ApplicationDbContext context,
         IPasswordHasher<User> passwordHasher,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IPasswordHasher<Groomer> groomerPasswordHasher)
+
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _configuration = configuration;
+        _groomerPasswordHasher = groomerPasswordHasher;
     }
 
     [AllowAnonymous]
@@ -78,6 +83,93 @@ public class AuthController : ControllerBase
             }
         });
     }
+
+
+    [AllowAnonymous]
+    [HttpPost("groomer-login")]
+    public async Task<IActionResult> GroomerLogin(LoginUserDto dto)
+    {
+        var email = dto.Email.Trim();
+
+        var groomer = await _context.Groomers
+            .FirstOrDefaultAsync(g => g.Email == email);
+
+        if (groomer == null)
+            return Unauthorized(new { message = "Неверный email или пароль." });
+
+        var verification = _groomerPasswordHasher.VerifyHashedPassword(
+            groomer, groomer.PasswordHash, dto.Password);
+
+        if (verification == PasswordVerificationResult.Failed)
+            return Unauthorized(new { message = "Неверный email или пароль." });
+
+        if (groomer.IsActive != true)
+            return StatusCode(403, new
+            {
+                message = "Ваш аккаунт мастера деактивирован."
+            });
+
+        if (verification == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            groomer.PasswordHash = _groomerPasswordHasher.HashPassword(
+                groomer, dto.Password);
+
+            await _context.SaveChangesAsync();
+        }
+
+        var token = CreateGroomerToken(groomer);
+
+        var minutes = _configuration.GetValue<int?>("Jwt:ExpirationMinutes") ?? 60;
+        if (minutes <= 0) minutes = 60;
+
+        return Ok(new
+        {
+            token,
+            expiresAt = DateTime.UtcNow.AddMinutes(minutes),
+            groomer = new
+            {
+                groomer.Id,
+                groomer.Name,
+                groomer.Email,
+                groomer.Phone,
+                groomer.Specialization
+            }
+        });
+    }
+
+    private string CreateGroomerToken(Groomer groomer)
+    {
+        var key = _configuration["Jwt:Key"]!;
+        var issuer = _configuration["Jwt:Issuer"] ?? "GroomingSalon.API";
+        var audience = _configuration["Jwt:Audience"] ?? "GroomingSalon.Frontend";
+
+        var minutes = _configuration.GetValue<int?>("Jwt:ExpirationMinutes") ?? 60;
+        if (minutes <= 0) minutes = 60;
+
+        var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, groomer.Id.ToString()),
+        new(ClaimTypes.Name, groomer.Name),
+        new(ClaimTypes.Email, groomer.Email),
+        new(ClaimTypes.Role, "Groomer"),
+        new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+    };
+
+        var credentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+            SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: issuer,
+            audience: audience,
+            claims: claims,
+            notBefore: DateTime.UtcNow,
+            expires: DateTime.UtcNow.AddMinutes(minutes),
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
 
     [Authorize]
     [HttpGet("me")]

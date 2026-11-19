@@ -1,10 +1,11 @@
 
-using System.Security.Claims;
 using GroomingSalon.API.Data;
 using GroomingSalon.API.Models;
+using GroomingSalon.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace GroomingSalon.API.Controllers;
 
@@ -14,10 +15,14 @@ namespace GroomingSalon.API.Controllers;
 public class AppointmentsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
+    private readonly NotificationService _notifications;
 
-    public AppointmentsController(ApplicationDbContext context)
+    public AppointmentsController(
+        ApplicationDbContext context,
+        NotificationService notifications)
     {
         _context = context;
+        _notifications = notifications;
     }
 
     private bool TryGetUserId(out uint userId) =>
@@ -188,6 +193,23 @@ public class AppointmentsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        if (request.Status == "cancelled")
+        {
+            await _notifications.NotifyUserAsync(
+                appointment.UserId,
+                "Запись отменена",
+                $"Ваша запись на {appointment.StartDatetime:dd.MM.yyyy HH:mm} отменена.",
+                "appointment_cancelled");
+
+            await _notifications.NotifyGroomerAsync(
+                appointment.GroomerId,
+                "Запись отменена",
+                $"Запись на {appointment.StartDatetime:dd.MM.yyyy HH:mm} отменена.",
+                "appointment_cancelled");
+        }
+
+
+
         return Ok(new
         {
             appointment.Id,
@@ -293,6 +315,11 @@ public class AppointmentsController : ControllerBase
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+            await _notifications.NotifyGroomerAsync(
+                groomer.Id,
+                "Новая запись",
+                $"{pet.Name} — {service.Name}, {start:dd.MM.yyyy HH:mm}",
+                "appointment_created");
 
             return CreatedAtAction(
                 nameof(GetAppointment),
@@ -330,6 +357,12 @@ public class AppointmentsController : ControllerBase
         appointment.Status = "cancelled";
 
         await _context.SaveChangesAsync();
+
+        await _notifications.NotifyGroomerAsync(
+            appointment.GroomerId,
+            "Запись отменена",
+            $"Клиент отменил запись на {appointment.StartDatetime:dd.MM.yyyy HH:mm}.",
+            "appointment_cancelled");
 
         return NoContent();
     }
