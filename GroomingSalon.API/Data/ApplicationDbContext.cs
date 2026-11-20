@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using GroomingSalon.API.Models;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +29,8 @@ public partial class ApplicationDbContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<Notification> Notifications { get; set; }
+
+    public virtual DbSet<GroomerPortfolio> GroomerPortfolios { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

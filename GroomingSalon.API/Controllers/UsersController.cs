@@ -22,7 +22,6 @@ public class UsersController : ControllerBase
         _passwordHasher = passwordHasher;
     }
 
-    // Список пользователей доступен только администратору.
     [HttpGet]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetUsers()
@@ -35,30 +34,41 @@ public class UsersController : ControllerBase
             u.Phone,
             u.IsAdmin,
             u.IsBanned,
+            u.ImageUrl,
             u.CreatedAt
-
         }).ToListAsync();
+
         return Ok(users);
     }
 
-    // Получение произвольного пользователя — только администратору.
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetUser(uint id)
     {
-        var user = await _context.Users.Where(u => u.Id == id).Select(u => new
-        {
-            u.Id, u.Name, u.Email, u.Phone, u.IsAdmin, u.CreatedAt
-        }).FirstOrDefaultAsync();
+        var user = await _context.Users
+            .Where(u => u.Id == id)
+            .Select(u => new
+            {
+                u.Id,
+                u.Name,
+                u.Email,
+                u.Phone,
+                u.IsAdmin,
+                u.IsBanned,
+                u.ImageUrl,
+                u.CreatedAt
+            })
+            .FirstOrDefaultAsync();
+
         return user == null ? NotFound() : Ok(user);
     }
 
-    // Регистрация остаётся публичной.
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<IActionResult> Register(RegisterUserDto dto)
     {
         var email = dto.Email.Trim();
+
         if (await _context.Users.AnyAsync(u => u.Email == email))
             return Conflict(new { message = "Пользователь с таким email уже существует" });
 
@@ -70,23 +80,30 @@ public class UsersController : ControllerBase
             IsAdmin = false,
             CreatedAt = DateTime.UtcNow
         };
+
         user.PasswordHash = _passwordHasher.HashPassword(user, dto.Password);
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetUser), new { id = user.Id }, new
+        return StatusCode(StatusCodes.Status201Created, new
         {
-            user.Id, user.Name, user.Email, user.Phone, user.IsAdmin, user.CreatedAt
+            user.Id,
+            user.Name,
+            user.Email,
+            user.Phone,
+            user.IsAdmin,
+            user.ImageUrl,
+            user.CreatedAt
         });
     }
 
-    // Администратор может редактировать пользователя. Пароль здесь не меняется.
-    [HttpPut("{id}")]
+    [HttpPut("{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateUser(uint id, User updatedUser)
     {
         var user = await _context.Users.FindAsync(id);
-        if (user == null) return NotFound();
+        if (user == null)
+            return NotFound();
 
         var email = updatedUser.Email.Trim();
         if (await _context.Users.AnyAsync(u => u.Email == email && u.Id != id))
@@ -95,14 +112,24 @@ public class UsersController : ControllerBase
         user.Name = updatedUser.Name.Trim();
         user.Email = email;
         user.Phone = updatedUser.Phone?.Trim();
+        // ImageUrl меняется через ImagesController.
+
         await _context.SaveChangesAsync();
 
-        return Ok(new { user.Id, user.Name, user.Email, user.Phone, user.IsAdmin, user.CreatedAt });
+        return Ok(new
+        {
+            user.Id,
+            user.Name,
+            user.Email,
+            user.Phone,
+            user.IsAdmin,
+            user.IsBanned,
+            user.ImageUrl,
+            user.CreatedAt
+        });
     }
 
-
-    // Ручная блокировка пользователя
-    [HttpPut("{id}/ban")]
+    [HttpPut("{id:int}/ban")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> BanUser(uint id)
     {
@@ -116,7 +143,6 @@ public class UsersController : ControllerBase
 
         user.IsBanned = true;
 
-        // Отменяем все будущие записи пользователя
         var futureAppointments = await _context.Appointments
             .Where(a => a.Pet.UserId == id
                 && a.StartDatetime > DateTime.Now
@@ -124,9 +150,7 @@ public class UsersController : ControllerBase
             .ToListAsync();
 
         foreach (var appointment in futureAppointments)
-        {
             appointment.Status = "cancelled";
-        }
 
         await _context.SaveChangesAsync();
 
@@ -139,8 +163,7 @@ public class UsersController : ControllerBase
         });
     }
 
-    // Ручная разблокировка пользователя
-    [HttpPut("{id}/unban")]
+    [HttpPut("{id:int}/unban")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UnbanUser(uint id)
     {
@@ -160,14 +183,14 @@ public class UsersController : ControllerBase
         });
     }
 
-
-
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeleteUser(uint id)
     {
         var user = await _context.Users.FindAsync(id);
-        if (user == null) return NotFound();
+        if (user == null)
+            return NotFound();
+
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
         return NoContent();

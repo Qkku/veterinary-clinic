@@ -1,4 +1,3 @@
-
 using GroomingSalon.API.Data;
 using GroomingSalon.API.DTOs;
 using GroomingSalon.API.Models;
@@ -24,7 +23,6 @@ public class GroomersController : ControllerBase
         _passwordHasher = passwordHasher;
     }
 
-    // Получить всех мастеров
     [HttpGet]
     public async Task<IActionResult> GetGroomers()
     {
@@ -40,6 +38,7 @@ public class GroomersController : ControllerBase
                 g.ExperienceYears,
                 g.Specialization,
                 g.IsActive,
+                g.ImageUrl,
                 g.CreatedAt
             })
             .ToListAsync();
@@ -47,8 +46,7 @@ public class GroomersController : ControllerBase
         return Ok(groomers);
     }
 
-    // Получить мастера по ID
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetGroomer(uint id)
     {
         var groomer = await _context.Groomers
@@ -64,17 +62,14 @@ public class GroomersController : ControllerBase
                 g.ExperienceYears,
                 g.Specialization,
                 g.IsActive,
+                g.ImageUrl,
                 g.CreatedAt
             })
             .FirstOrDefaultAsync();
 
-        if (groomer == null)
-            return NotFound();
-
-        return Ok(groomer);
+        return groomer == null ? NotFound() : Ok(groomer);
     }
 
-    // Добавить мастера
     [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateGroomer(CreateGroomerDto dto)
@@ -97,25 +92,23 @@ public class GroomersController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
 
-        groomer.PasswordHash = _passwordHasher.HashPassword(
-            groomer, dto.Password);
+        groomer.PasswordHash = _passwordHasher.HashPassword(groomer, dto.Password);
 
         _context.Groomers.Add(groomer);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(
-            nameof(GetGroomer),
-            new { id = groomer.Id },
-            new { id = groomer.Id, groomer.Name, groomer.Email }
-        );
+        return CreatedAtAction(nameof(GetGroomer), new { id = groomer.Id }, new
+        {
+            groomer.Id,
+            groomer.Name,
+            groomer.Email,
+            groomer.ImageUrl
+        });
     }
 
-    // Изменить мастера
     [Authorize(Roles = "Admin")]
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateGroomer(
-        uint id,
-        UpdateGroomerDto dto)
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> UpdateGroomer(uint id, UpdateGroomerDto dto)
     {
         var groomer = await _context.Groomers.FindAsync(id);
 
@@ -123,7 +116,6 @@ public class GroomersController : ControllerBase
             return NotFound();
 
         var email = dto.Email.Trim();
-
         var emailExists = await _context.Groomers
             .AnyAsync(g => g.Email == email && g.Id != id);
 
@@ -138,14 +130,14 @@ public class GroomersController : ControllerBase
         groomer.ExperienceYears = dto.ExperienceYears;
         groomer.Specialization = dto.Specialization;
         groomer.IsActive = dto.IsActive;
+        // ImageUrl изменяется через ImagesController, чтобы не затереть его пустым значением DTO.
 
         if (!string.IsNullOrWhiteSpace(dto.Password))
         {
             if (dto.Password.Length < 8)
                 return BadRequest(new { message = "Пароль должен содержать минимум 8 символов." });
 
-            groomer.PasswordHash = _passwordHasher.HashPassword(
-                groomer, dto.Password);
+            groomer.PasswordHash = _passwordHasher.HashPassword(groomer, dto.Password);
         }
 
         await _context.SaveChangesAsync();
@@ -161,13 +153,13 @@ public class GroomersController : ControllerBase
             groomer.ExperienceYears,
             groomer.Specialization,
             groomer.IsActive,
+            groomer.ImageUrl,
             groomer.CreatedAt
         });
     }
 
-    // Удалить мастера
     [Authorize(Roles = "Admin")]
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteGroomer(uint id)
     {
         var groomer = await _context.Groomers.FindAsync(id);

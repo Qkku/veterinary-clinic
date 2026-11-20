@@ -13,7 +13,11 @@ namespace GroomingSalon.API.Controllers;
 public class PetsController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-    public PetsController(ApplicationDbContext context) => _context = context;
+
+    public PetsController(ApplicationDbContext context)
+    {
+        _context = context;
+    }
 
     private bool TryGetUserId(out uint userId) =>
         uint.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
@@ -21,64 +25,131 @@ public class PetsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetPets()
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        var pets = await _context.Pets.Where(p => p.UserId == userId).Select(p => new
-        {
-            p.Id, p.UserId, p.Name, p.Age, p.Breed, p.Size, p.Notes, p.CreatedAt
-        }).ToListAsync();
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var pets = await _context.Pets
+            .Where(p => p.UserId == userId)
+            .Select(p => new
+            {
+                p.Id,
+                p.UserId,
+                p.Name,
+                p.Age,
+                p.Breed,
+                p.Size,
+                p.Notes,
+                p.ImageUrl,
+                p.CreatedAt
+            })
+            .ToListAsync();
+
         return Ok(pets);
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetPet(uint id)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        var pet = await _context.Pets.Where(p => p.Id == id && p.UserId == userId).Select(p => new
-        {
-            p.Id, p.UserId, p.Name, p.Age, p.Breed, p.Size, p.Notes, p.CreatedAt
-        }).FirstOrDefaultAsync();
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var pet = await _context.Pets
+            .Where(p => p.Id == id && p.UserId == userId)
+            .Select(p => new
+            {
+                p.Id,
+                p.UserId,
+                p.Name,
+                p.Age,
+                p.Breed,
+                p.Size,
+                p.Notes,
+                p.ImageUrl,
+                p.CreatedAt
+            })
+            .FirstOrDefaultAsync();
+
         return pet == null ? NotFound() : Ok(pet);
     }
 
     [HttpPost]
     public async Task<IActionResult> CreatePet(Pet pet)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
         pet.Id = 0;
-        pet.UserId = userId; // Владелец берётся из токена, а не из тела запроса.
+        pet.UserId = userId;
         pet.CreatedAt = DateTime.UtcNow;
+        pet.ImageUrl = null; // Фото загружается отдельным запросом после создания питомца.
+
         _context.Pets.Add(pet);
         await _context.SaveChangesAsync();
+
         return CreatedAtAction(nameof(GetPet), new { id = pet.Id }, new
         {
-            pet.Id, pet.UserId, pet.Name, pet.Age, pet.Breed, pet.Size, pet.Notes, pet.CreatedAt
+            pet.Id,
+            pet.UserId,
+            pet.Name,
+            pet.Age,
+            pet.Breed,
+            pet.Size,
+            pet.Notes,
+            pet.ImageUrl,
+            pet.CreatedAt
         });
     }
 
-    [HttpPut("{id}")]
+    [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdatePet(uint id, Pet updatedPet)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        var pet = await _context.Pets.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
-        if (pet == null) return NotFound();
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var pet = await _context.Pets
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+
+        if (pet == null)
+            return NotFound();
+
         pet.Name = updatedPet.Name;
         pet.Age = updatedPet.Age;
         pet.Breed = updatedPet.Breed;
         pet.Size = updatedPet.Size;
         pet.Notes = updatedPet.Notes;
-        pet.ImageUrl = updatedPet.ImageUrl;
+        // ImageUrl здесь не меняем: он управляется ImagesController.
+
         await _context.SaveChangesAsync();
-        return Ok(new { pet.Id, pet.UserId, pet.Name, pet.Age, pet.Breed, pet.Size, pet.Notes, pet.CreatedAt });
+
+        return Ok(new
+        {
+            pet.Id,
+            pet.UserId,
+            pet.Name,
+            pet.Age,
+            pet.Breed,
+            pet.Size,
+            pet.Notes,
+            pet.ImageUrl,
+            pet.CreatedAt
+        });
     }
 
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeletePet(uint id)
     {
-        if (!TryGetUserId(out var userId)) return Unauthorized();
-        var pet = await _context.Pets.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
-        if (pet == null) return NotFound();
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var pet = await _context.Pets
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+
+        if (pet == null)
+            return NotFound();
+
         _context.Pets.Remove(pet);
         await _context.SaveChangesAsync();
+
         return NoContent();
     }
 }
