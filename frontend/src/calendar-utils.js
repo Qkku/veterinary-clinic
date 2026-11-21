@@ -1,0 +1,6 @@
+const dateKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+export function weekDays(anchor){const d=new Date(anchor);d.setDate(d.getDate()-(d.getDay()+6)%7);return Array.from({length:7},(_,i)=>{const day=new Date(d);day.setDate(day.getDate()+i);return dateKey(day);});}
+const mins=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m;};
+const fmt=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+const overlap=(a,b,r)=>a<mins(r.endTime)&&mins(r.startTime)<b;
+export function buildSlots(rows){const result=new Map();const absences=rows.filter(r=>r.kind==='leave'),bookings=rows.filter(r=>r.kind==='appointment');for(const shift of rows.filter(r=>r.kind==='shift')){const start=mins(shift.startTime),end=mins(shift.endTime),step=Number(shift.slotDurationMinutes)||30;if(!Number.isFinite(start)||!Number.isFinite(end)||step<1||start<0||end>1440)continue;for(let a=start;a<end;a+=step){const b=Math.min(a+step,end);const booked=bookings.some(r=>overlap(a,b,r));if(!booked&&absences.some(r=>overlap(a,b,r)))continue;result.set(a,{start:a,label:`${fmt(a)}–${fmt(b)}`,booked});}}return [...result.values()].sort((a,b)=>a.start-b.start);}
