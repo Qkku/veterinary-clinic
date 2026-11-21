@@ -32,8 +32,33 @@ public partial class ApplicationDbContext : DbContext
 
     public virtual DbSet<GroomerPortfolio> GroomerPortfolios { get; set; }
 
+    public virtual DbSet<LeaveRequest> LeaveRequests { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<GroomerPortfolio>(entity =>
+        {
+            entity.ToTable("groomer_portfolio");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.GroomerId).HasColumnName("groomer_id");
+            entity.Property(e => e.ImageUrl).HasMaxLength(500).HasColumnName("image_url");
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime").HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<LeaveRequest>(entity =>
+        {
+            entity.ToTable("leave_requests");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.GroomerId).HasColumnName("groomer_id");
+            entity.Property(e => e.StartDate).HasColumnType("date").HasColumnName("start_date");
+            entity.Property(e => e.EndDate).HasColumnType("date").HasColumnName("end_date");
+            entity.Property(e => e.Reason).HasMaxLength(500).HasColumnName("reason");
+            entity.Property(e => e.Status).HasMaxLength(20).HasColumnName("status");
+            entity.Property(e => e.CreatedAt).HasColumnType("datetime").HasColumnName("created_at");
+            entity.HasOne(e => e.Groomer).WithMany().HasForeignKey(e => e.GroomerId);
+        });
         modelBuilder.Entity<Appointment>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PRIMARY");
@@ -268,6 +293,7 @@ public partial class ApplicationDbContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.GroomerId).HasColumnName("groomer_id");
             entity.Property(e => e.Rating).HasColumnName("rating");
+            entity.Property(e => e.Status).HasMaxLength(20).HasColumnName("status");
             entity.Property(e => e.Text)
                 .HasColumnType("text")
                 .HasColumnName("text");

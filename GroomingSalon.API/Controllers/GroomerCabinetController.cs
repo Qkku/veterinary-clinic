@@ -1,4 +1,4 @@
-﻿
+
 using System.Security.Claims;
 using GroomingSalon.API.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -199,4 +199,13 @@ public class GroomerCabinetController : ControllerBase
             Days = days
         });
     }
+    [HttpGet("reviews")]
+    public async Task<IActionResult> GetReviews()
+    {
+        if (!uint.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var groomerId)) return Unauthorized();
+        var rows = await _context.Reviews.Where(r => r.GroomerId == groomerId && r.Status == "approved")
+            .OrderByDescending(r => r.CreatedAt).Select(r => new { r.Id, r.Rating, r.Text, r.CreatedAt, UserName = r.User.Name }).ToListAsync();
+        return Ok(rows);
+    }
+
 }

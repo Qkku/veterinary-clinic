@@ -114,6 +114,7 @@ public class ReviewsController : ControllerBase
             AppointmentId = appointment.Id,
             Rating = dto.Rating,
             Text = dto.Text,
+            Status = "pending",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -161,11 +162,23 @@ public class ReviewsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteReview(uint id)
     {
-        if (!TryGetUserId(out var userId))
-            return Unauthorized();
+        Review? review;
 
-        var review = await _context.Reviews
-            .FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
+        if (User.IsInRole("Admin"))
+        {
+
+            review = await _context.Reviews
+                .FirstOrDefaultAsync(r => r.Id == id);
+        }
+        else
+        {
+
+            if (!TryGetUserId(out var userId))
+                return Unauthorized();
+
+            review = await _context.Reviews
+                .FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
+        }
 
         if (review == null)
             return NotFound();
@@ -175,6 +188,47 @@ public class ReviewsController : ControllerBase
 
         return NoContent();
     }
+
+    // Публичные отзывы, прошедшие модерацию
+    [AllowAnonymous]
+    [HttpGet("public")]
+    public async Task<IActionResult> GetPublicReviews()
+    {
+        var rows = await _context.Reviews.Where(r => r.Status == "approved")
+            .OrderByDescending(r => r.CreatedAt).Select(r => new { r.Id, r.Rating, r.Text, r.CreatedAt, r.GroomerId, GroomerName = r.Groomer.Name, UserName = r.User.Name }).ToListAsync();
+        return Ok(rows);
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllReviews()
+    {
+        var rows = await _context.Reviews.OrderByDescending(r => r.CreatedAt)
+            .Select(r => new { r.Id, r.UserId, UserName = r.User.Name, r.GroomerId, GroomerName = r.Groomer.Name, r.Rating, r.Text, r.Status, r.CreatedAt }).ToListAsync();
+        return Ok(rows);
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("pending")]
+    public async Task<IActionResult> GetPendingReviews()
+    {
+        var rows = await _context.Reviews.Where(r => r.Status == "pending").OrderBy(r => r.CreatedAt)
+            .Select(r => new { r.Id, r.UserId, UserName = r.User.Name, r.GroomerId, GroomerName = r.Groomer.Name, r.Rating, r.Text, r.Status, r.CreatedAt }).ToListAsync();
+        return Ok(rows);
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpPatch("{id:int}/moderate")]
+    public async Task<IActionResult> Moderate(uint id, [FromBody] ReviewModerationDto dto)
+    {
+        if (dto.Status is not ("approved" or "rejected")) return BadRequest(new { message = "Допустимые статусы: approved, rejected." });
+        var review = await _context.Reviews.FindAsync(id);
+        if (review == null) return NotFound();
+        review.Status = dto.Status;
+        await _context.SaveChangesAsync();
+        return Ok(new { review.Id, review.Status });
+    }
+
 }
 
 public class ReviewCreateDto
@@ -195,3 +249,5 @@ public class ReviewUpdateDto
 
     public string? Text { get; set; }
 }
+
+public class ReviewModerationDto { [Required] public string Status { get; set; } = ""; }

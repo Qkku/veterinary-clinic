@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace GroomingSalon.API.Models;
@@ -18,6 +18,8 @@ public partial class Review
     public string? Text { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public string Status { get; set; } = "pending";
 
     public virtual Appointment? Appointment { get; set; }
 
